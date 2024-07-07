@@ -18,7 +18,6 @@ internal class Jester : RoleBase
     private static OptionItem JesterHasImpostorVision;
     private static OptionItem JesterCanVent;
     private static OptionItem HideJesterVote;
-    public static OptionItem SunnyboyChance;
 
     private static readonly Dictionary<byte, byte> JesterRevengeTarget = new();
     private static readonly HashSet<byte> ExiledJesters = new();
@@ -34,9 +33,6 @@ internal class Jester : RoleBase
             .SetParent(CustomRoleSpawnChances[CustomRoles.Jester]);
         HideJesterVote = BooleanOptionItem.Create(Id + 5, "HideJesterVote", true, TabGroup.NeutralRoles, false)
             .SetParent(CustomRoleSpawnChances[CustomRoles.Jester]);
-        SunnyboyChance = IntegerOptionItem.Create(Id + 6, "SunnyboyChance", new(0, 100, 5), 0, TabGroup.NeutralRoles, false)
-            .SetParent(CustomRoleSpawnChances[CustomRoles.Jester])
-            .SetValueFormat(OptionFormat.Percent);
     }
 
     public override void Init()
