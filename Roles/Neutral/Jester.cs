@@ -1,4 +1,4 @@
-﻿using AmongUs.GameOptions;
+using AmongUs.GameOptions;
 using static TOHE.Options;
 
 namespace TOHE.Roles.Neutral;
@@ -7,7 +7,7 @@ internal class Jester : RoleBase
 {
     //===========================SETUP================================\\
     private const int Id = 14400;
-    private static readonly HashSet<byte> PlayerIds = [];
+    private static readonly HashSet<byte> PlayerIds = new();
     public static bool HasEnabled => PlayerIds.Any();
     
     public override CustomRoles ThisRoleBase => JesterCanVent.GetBool() ? CustomRoles.Engineer : CustomRoles.Crewmate;
@@ -17,9 +17,11 @@ internal class Jester : RoleBase
     private static OptionItem JesterCanUseButton;
     private static OptionItem JesterHasImpostorVision;
     private static OptionItem JesterCanVent;
-    private static OptionItem MeetingsNeededForJesterWin;
     private static OptionItem HideJesterVote;
     public static OptionItem SunnyboyChance;
+
+    private static readonly Dictionary<byte, byte> JesterRevengeTarget = new();
+    private static readonly HashSet<byte> ExiledJesters = new();
 
     public override void SetupCustomOption()
     {
@@ -32,21 +34,23 @@ internal class Jester : RoleBase
             .SetParent(CustomRoleSpawnChances[CustomRoles.Jester]);
         HideJesterVote = BooleanOptionItem.Create(Id + 5, "HideJesterVote", true, TabGroup.NeutralRoles, false)
             .SetParent(CustomRoleSpawnChances[CustomRoles.Jester]);
-        MeetingsNeededForJesterWin = IntegerOptionItem.Create(Id + 6, "MeetingsNeededForWin", new(0, 10, 1), 0, TabGroup.NeutralRoles, false)
-            .SetParent(CustomRoleSpawnChances[CustomRoles.Jester])
-            .SetValueFormat(OptionFormat.Times);
-        SunnyboyChance = IntegerOptionItem.Create(Id + 7, "SunnyboyChance", new(0, 100, 5), 0, TabGroup.NeutralRoles, false)
+        SunnyboyChance = IntegerOptionItem.Create(Id + 6, "SunnyboyChance", new(0, 100, 5), 0, TabGroup.NeutralRoles, false)
             .SetParent(CustomRoleSpawnChances[CustomRoles.Jester])
             .SetValueFormat(OptionFormat.Percent);
     }
+
     public override void Init()
     {
         PlayerIds.Clear();
+        JesterRevengeTarget.Clear();
+        ExiledJesters.Clear();
     }
+
     public override void Add(byte playerId)
     {
         PlayerIds.Add(playerId);
     }
+
     public override void ApplyGameOptions(IGameOptions opt, byte playerId)
     {
         AURoleOptions.EngineerCooldown = 1f;
@@ -54,39 +58,53 @@ internal class Jester : RoleBase
 
         opt.SetVision(JesterHasImpostorVision.GetBool());
     }
+
     public override bool HideVote(PlayerVoteArea votedPlayer) => HideJesterVote.GetBool();
     public override bool OnCheckStartMeeting(PlayerControl reporter) => JesterCanUseButton.GetBool();
 
     public override void CheckExile(GameData.PlayerInfo exiled, ref bool DecidedWinner, bool isMeetingHud, ref string name)
     {
-        if (MeetingsNeededForJesterWin.GetInt() <= Main.MeetingsPassed)
+        if (PlayerIds.Contains(exiled.PlayerId))
         {
+            ExiledJesters.Add(exiled.PlayerId);
+            JesterRevengeTarget[exiled.PlayerId] = byte.MaxValue; // Set to a default value, the player will choose the target later
+
             if (isMeetingHud)
             {
-                name = string.Format(Translator.GetString("ExiledJester"), Main.LastVotedPlayer, Utils.GetDisplayRoleAndSubName(exiled.PlayerId, exiled.PlayerId, true));
-                DecidedWinner = true;
-            }
-            else
-            {
-                if (!CustomWinnerHolder.CheckForConvertedWinner(exiled.PlayerId))
-                {
-                    CustomWinnerHolder.ResetAndSetWinner(CustomWinner.Jester);
-                    CustomWinnerHolder.WinnerIds.Add(exiled.PlayerId);
-                }
-
-                // Check exile target Executioner
-                foreach (var executioner in Executioner.playerIdList)
-                {
-                    if (Executioner.IsTarget(executioner, exiled.PlayerId))
-                    {
-                        CustomWinnerHolder.AdditionalWinnerTeams.Add(AdditionalWinners.Executioner);
-                        CustomWinnerHolder.WinnerIds.Add(executioner);
-                    }
-                }
-                DecidedWinner = true;
+                name = $"{exiled.PlayerId} will get their revenge from the grave...";
             }
         }
-        else if (CEMode.GetInt() == 2 && isMeetingHud)
-            name += string.Format(Translator.GetString("JesterMeetingLoose"), MeetingsNeededForJesterWin.GetInt() + 1);
+    }
+
+    public static void ChooseRevengeTarget(byte jesterId, byte targetId)
+    {
+        if (JesterRevengeTarget.ContainsKey(jesterId))
+        {
+            JesterRevengeTarget[jesterId] = targetId;
+        }
+    }
+
+    public override void HandleDeath(byte killerId, byte targetId)
+    {
+        foreach (var jesterId in JesterRevengeTarget.Keys.ToList())
+        {
+            if (JesterRevengeTarget[jesterId] == byte.MaxValue) continue;
+
+            if (targetId == JesterRevengeTarget[jesterId])
+            {
+                Utils.KillPlayer(Utils.GetPlayerById(targetId), true);
+                JesterRevengeTarget.Remove(jesterId);
+                break;
+            }
+        }
+    }
+
+    public override void OnGameEnd(WinningTeam winningTeam)
+    {
+        foreach (var jesterId in ExiledJesters)
+        {
+            CustomWinnerHolder.AdditionalWinnerTeams.Add(winningTeam);
+            CustomWinnerHolder.WinnerIds.Add(jesterId);
+        }
     }
 }
