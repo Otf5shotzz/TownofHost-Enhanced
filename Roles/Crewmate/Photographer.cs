@@ -1,6 +1,6 @@
 using AmongUs.GameOptions;
 using static TOHE.Options;
-// Otf made this
+
 namespace TOHE.Roles.Crew
 {
     internal class Photographer : RoleBase
